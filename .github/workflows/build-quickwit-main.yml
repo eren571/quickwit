@@ -1,0 +1,47 @@
+name: Build Quickwit main
+
+on:
+  # 手动触发
+  workflow_dispatch:
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 检出 Quickwit 官方仓库（或你自己的 fork）
+      - name: Checkout quickwit
+        uses: actions/checkout@v4
+        with:
+          repository: quickwit-oss/quickwit   # 这里很关键！不是你当前这个 build 仓库
+          ref: main
+          fetch-depth: 1
+
+      # 2. 安装 Rust（也可以用默认 stable）
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      # 3. 缓存 cargo 依赖，加快后续构建
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # 4. 在 quickwit 子目录下构建 release 二进制
+      - name: Build quickwit binary
+        working-directory: quickwit          # 重点：Quickwit 的 Cargo.toml 在这个子目录里
+        run: |
+          # 官方 Dockerfile 用的是 CARGO_FEATURES=release-feature-set :contentReference[oaicite:1]{index=1}
+          cargo build --release --bin quickwit --features release-feature-set
+          strip target/release/quickwit
+          mkdir -p artifacts
+          cp target/release/quickwit artifacts/quickwit-main-linux-amd64
+
+      # 5. 上传构建产物，方便你从 GitHub 网页下载
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickwit-main-linux-amd64
+          path: artifacts/quickwit-main-linux-amd64
