@@ -40,6 +40,8 @@ jobs:
       - name: Add musl target
         run: |
           rustup target add x86_64-unknown-linux-musl
+          echo "Installed targets:"
+          rustup target list --installed
 
       # 5. 缓存 Cargo 依赖（可选，但推荐）
       - name: Cache cargo
