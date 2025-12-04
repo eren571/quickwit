@@ -1,0 +1,71 @@
+name: Build Quickwit main (AL2023 glibc 2.34)
+
+on:
+  # 手动触发
+  workflow_dispatch:
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+
+    # ✅ 整个 job 在 Amazon Linux 2023 容器里跑
+    container:
+      image: public.ecr.aws/amazonlinux/amazonlinux:2023
+
+    steps:
+      # 1. 在容器里先装编译依赖（注意这里是 dnf，没有 sudo）
+      - name: Install build dependencies
+        run: |
+          dnf -y update
+          dnf -y install \
+            git \
+            gcc \
+            gcc-c++ \
+            make \
+            cmake \
+            pkg-config \
+            openssl-devel \
+            protobuf-compiler \
+            tar \
+            gzip
+
+      # 2. 检出 quickwit 源码
+      - name: Checkout quickwit
+        uses: actions/checkout@v4
+        with:
+          repository: quickwit-oss/quickwit
+          ref: main
+          fetch-depth: 1
+
+      # 3. 安装 Rust（在容器里跑 rustup 脚本）
+      - name: Install Rust (stable)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          # 把 cargo 加入 PATH，供后面的 step 用
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Show Rust toolchain
+        run: |
+          rustc -V
+          cargo -V
+          ldd --version  # 这里你可以看到 glibc 版本是 2.34
+
+      # 4. 编译 quickwit（在 quickwit 子目录）
+      - name: Build quickwit binary
+        working-directory: quickwit
+        env:
+          CARGO_INCREMENTAL: 0
+        run: |
+          cargo build --release --bin quickwit --features release-feature-set
+          ls -lh target/release/
+          strip target/release/quickwit || true
+          mkdir -p artifacts
+          cp target/release/quickwit artifacts/quickwit-main-al2023-amd64
+
+      # 5. 上传二进制作为 artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickwit-main-al2023-amd64
+          path: quickwit/artifacts/quickwit-main-al2023-amd64
