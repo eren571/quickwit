@@ -50,10 +50,14 @@ jobs:
           strip target/release/quickwit || true
           mkdir -p artifacts
           cp target/release/quickwit artifacts/quickwit-main-linux-amd64
+          echo "== PWD =="
+          pwd
+          echo "== LS =="
+          ls -R
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: quickwit-main-linux-amd64
-          path: artifacts/quickwit-main-linux-amd64
+          path: quickwit/artifacts/quickwit-main-linux-amd64
 
