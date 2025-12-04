@@ -1,0 +1,84 @@
+name: Build Quickwit main (musl static)
+
+on:
+  # 手动触发
+  workflow_dispatch:
+
+jobs:
+  build-linux-musl:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 拉取 quickwit 源码
+      - name: Checkout quickwit
+        uses: actions/checkout@v4
+        with:
+          # 如果你 fork 了仓库，可以改成: your-name/quickwit
+          repository: quickwit-oss/quickwit
+          ref: main
+          fetch-depth: 1
+
+      # 2. 安装编译依赖（包含 musl-tools 和 protoc）
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            protobuf-compiler \
+            cmake \
+            musl-tools
+
+      # 3. 安装 Rust（stable）
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      # 4. 添加 musl 目标
+      - name: Add musl target
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+
+      # 5. 缓存 Cargo 依赖（可选，但推荐）
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # 6. 在 quickwit 子目录用 musl 目标编译
+      - name: Build quickwit binary (musl)
+        working-directory: quickwit
+        env:
+          CARGO_TARGET: x86_64-unknown-linux-musl
+        run: |
+          echo "Using target: ${CARGO_TARGET}"
+          # 编译：release + 指定 musl target
+          cargo build --release \
+            --target ${CARGO_TARGET} \
+            --bin quickwit \
+            --features release-feature-set
+
+          # 查看编译结果
+          ls -lh target/${CARGO_TARGET}/release/
+
+          # 尝试 strip，失败也不影响
+          strip target/${CARGO_TARGET}/release/quickwit || true
+
+          # 准备 artifact 目录
+          mkdir -p artifacts
+          cp target/${CARGO_TARGET}/release/quickwit artifacts/quickwit-main-musl-x86_64
+
+          echo "== PWD =="
+          pwd
+          echo "== LS (quickwit/) =="
+          ls -R
+
+      # 7. 上传构建好的二进制，供下载
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickwit-main-musl-x86_64
+          # 注意：这里相对的是仓库根目录，所以要带 quickwit/
+          path: quickwit/artifacts/quickwit-main-musl-x86_64
