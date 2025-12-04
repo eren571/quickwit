@@ -27,7 +27,9 @@ jobs:
             openssl-devel \
             protobuf-compiler \
             tar \
-            gzip
+            gzip \
+            clang \
+            llvm-devel
 
       # 2. 检出 quickwit 源码
       - name: Checkout quickwit
