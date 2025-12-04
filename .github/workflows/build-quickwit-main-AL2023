@@ -1,4 +1,4 @@
-name: Build Quickwit main (AL2023 glibc 2.34)
+name: Build Quickwit main (glibc 2.34)
 
 on:
   # 手动触发
