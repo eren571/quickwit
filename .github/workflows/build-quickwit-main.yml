@@ -1,14 +1,26 @@
-name: Build Quickwit main
+name: Build Quickwit main (glibc 2.34)
 
 on:
-  # 手动触发
   workflow_dispatch:
 
 jobs:
   build-linux-amd64:
     runs-on: ubuntu-latest
+    container:
+      image: public.ecr.aws/amazonlinux/amazonlinux:2023
 
     steps:
+      - name: Install build dependencies
+        run: |
+          dnf -y update
+          dnf -y install \
+            git gcc gcc-c++ make cmake pkg-config \
+            openssl-devel protobuf-compiler \
+            tar gzip xz \
+            clang llvm-devel \
+            python3 curl ca-certificates
+          update-ca-trust || true
+
       - name: Checkout quickwit
         uses: actions/checkout@v4
         with:
@@ -16,48 +28,53 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            pkg-config \
-            libssl-dev \
-            protobuf-compiler \
-            cmake
-            
-      - name: Check protoc
-        run: |
-          which protoc || echo "protoc not found"
-          protoc --version || echo "protoc failed"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      # ✅ 1) 安装 Node（参考官方 UI workflow：node 20）
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
         with:
-          toolchain: stable
+          node-version: 20
+          cache: "yarn"
+          cache-dependency-path: quickwit/quickwit-ui/yarn.lock
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
+      # ✅ 2) 准备 yarn（node20 用 corepack 最稳）
+      - name: Enable yarn (corepack)
+        run: |
+          corepack enable
+          yarn --version
 
+      # ✅ 3) 构建 UI（关键：发生在 cargo build 之前）
+      - name: Build Quickwit UI
+        working-directory: quickwit
+        run: |
+          yarn --cwd quickwit-ui install --frozen-lockfile
+          CI=false yarn --cwd quickwit-ui build
+
+      - name: Install Rust (stable)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Show Rust toolchain
+        run: |
+          rustc -V
+          cargo -V
+          ldd --version
+
+      # ✅ 4) 再编译 quickwit
       - name: Build quickwit binary
         working-directory: quickwit
         env:
           CARGO_INCREMENTAL: 0
         run: |
           cargo build --release --bin quickwit --features release-feature-set
+          ls -lh target/release/
           strip target/release/quickwit || true
           mkdir -p artifacts
-          cp target/release/quickwit artifacts/quickwit-main-linux-amd64
-          echo "== PWD =="
-          pwd
-          echo "== LS =="
-          ls -R
+          cp target/release/quickwit artifacts/quickwit-main-al2023-amd64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: quickwit-main-linux-amd64
-          path: quickwit/artifacts/quickwit-main-linux-amd64
-
+          name: quickwit-main-al2023-amd64
+          path: quickwit/artifacts/quickwit-main-al2023-amd64
