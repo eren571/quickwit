@@ -29,25 +29,51 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      # ✅ 1) 安装 Node（参考官方 UI workflow：node 20）
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "yarn"
-          cache-dependency-path: quickwit/quickwit-ui/yarn.lock
+          # ⚠️ 不要用 cache: yarn（否则会先找 yarn，直接失败）
+          # cache: "yarn"
+          # cache-dependency-path: quickwit/quickwit-ui/yarn.lock
 
-      # ✅ 2) 准备 yarn（node20 用 corepack 最稳）
       - name: Enable yarn (corepack)
+        working-directory: quickwit
         run: |
+          set -euxo pipefail
+          node --version
           corepack enable
+
+          # 如果 quickwit-ui/package.json 里有 packageManager，就按它指定的 yarn 版本来
+          PM=$(node -p "require('./quickwit-ui/package.json').packageManager || ''")
+          if [ -n "$PM" ]; then
+            corepack prepare "$PM" --activate
+          else
+            corepack prepare yarn@1.22.22 --activate
+          fi
+
           yarn --version
 
-      # ✅ 3) 构建 UI（关键：发生在 cargo build 之前）
+      - name: Cache Yarn
+        uses: actions/cache@v4
+        with:
+          path: |
+            /github/home/.cache/yarn
+            quickwit/quickwit-ui/.yarn/cache
+            quickwit/quickwit-ui/.yarn/unplugged
+          key: ${{ runner.os }}-yarn-${{ hashFiles('quickwit/quickwit-ui/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
       - name: Build Quickwit UI
         working-directory: quickwit
         run: |
-          yarn --cwd quickwit-ui install --frozen-lockfile
+          set -euxo pipefail
+          if yarn --version | grep -q '^1\.'; then
+            yarn --cwd quickwit-ui install --frozen-lockfile
+          else
+            yarn --cwd quickwit-ui install --immutable
+          fi
           CI=false yarn --cwd quickwit-ui build
 
       - name: Install Rust (stable)
