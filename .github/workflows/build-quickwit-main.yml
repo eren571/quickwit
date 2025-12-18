@@ -11,35 +11,16 @@ jobs:
 
     steps:
       - name: Install build dependencies
-        shell: bash
         run: |
           set -euxo pipefail
-          cat /etc/os-release
-
-          # 先确保 CA/基础工具在（有些情况下 repo https 会报 curl 60）
-          dnf -y clean all
-          dnf -y makecache --refresh || true
-
+          dnf -y update
           dnf -y install \
-            git \
-            gcc \
-            gcc-c++ \
-            make \
-            cmake \
+            git gcc gcc-c++ make cmake \
             pkgconf-pkg-config \
-            openssl-devel \
-            protobuf-compiler \
-            tar \
-            gzip \
-            xz \
-            curl \
-            ca-certificates \
-            python3 \
-            llvm-devel \
-            clang19 \
-            clang19-devel
-
-          update-ca-trust || true
+            openssl-devel protobuf-compiler \
+            tar gzip xz \
+            python3 ca-certificates \
+            llvm-devel clang19 clang19-devel
 
       - name: Checkout quickwit
         uses: actions/checkout@v4
